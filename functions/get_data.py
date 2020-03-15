@@ -16,23 +16,29 @@ Functions:
 socket() -- create a new socket object
 """
 
+import pickle
 import logging
 import sqlite3 as db
+import time
+from multiprocessing import Pool
 
 import pandas as pd
 import tushare as ts
+import numpy as np
 
 
 def get_from_sql(item: str = '*',
+                 stock_id: str = 'all',
                  name: str = 'data',
                  start_date: str = '19910101',
                  minimum_data: int = 0
-                 ) -> dict:
+                 ):
     """
-    Get dict of Dataframe data from the given sql_path and item
+    Get dict of Dataframe data from the given sql_path and item.
 
     Args:
         item (str, optional): Column that return. Defaults to '*'.
+        stock_id(str, optional): The stock data that returns.
         name (str, optional): SQL's path. Defaults to 'data'.
         start_date (str, optional): The starting date of data.
             Defaults to '19910101'.
@@ -40,46 +46,61 @@ def get_from_sql(item: str = '*',
             less than minimum_data. Defaults to 0.
 
     Returns:
-        data (dict): dict of Dataframe.
+        data (dict): Dict of Dataframe if all data were required. If only one
+        stock is required, then return a single dataframe.
 
     """
-
     con = db.connect('D:\\Data\\' + name + '.sqlite')
     cur = con.cursor()
     data = {}
     cur.execute("select name from sqlite_master where type='table'")
-
-    # get all table from the database
     stock_list = cur.fetchall()
     stock_list = [line[0] for line in stock_list]
+    if stock_id == 'all':
+        # get all table from the database
 
-    # read the dataframe one by one from the stock_list
-    for stock in stock_list:
-        data[stock] = pd.read_sql_query(
-            sql="SELECT " + item + " FROM '" + stock + "'",
-            con=con
-            )
-        # print(data[stock])
-        if data[stock].shape[0] < minimum_data:
-            data.pop(stock)
-        # data[stock] = data[stock][data[stock]['trade_date'] > start_date]
-
+        # read the dataframe one by one from the stock_list
+        for stock in stock_list:
+            data[stock] = pd.read_sql_query(
+                sql="SELECT " + item + " FROM '" + stock + "'",
+                con=con
+                )
+            # print(data[stock])
+            if data[stock].shape[0] < minimum_data:
+                data.pop(stock)
+            # data[stock] = data[stock][data[stock]['trade_date'] > start_date]
+    else:
+        if stock_id not in stock_list:
+            return pd.DataFrame()
+        data = pd.read_sql_query(
+                sql="SELECT " + item + " FROM '" + stock_id + "'",
+                con=con
+                )
+        if data.shape[0] < minimum_data:
+            return pd.DataFrame()
     cur.close()
     con.close()
     return data
 
 
-def get_industry_stock_list() -> dict:
+def get_industry_stock_list(level: int = 1) -> dict:
     """
-    Return a dict consist with list of stock code in each SW Level 1 Industry
-    """
+    Return a dict consist with list of stock code in each SW Level 1 Industry.
 
+    Args:
+        level (int, optional): The level of sw industry we want.
+
+    """
     ts.set_token('267addf63a14adcfc98067fc253fbd72a728461706acf9474c0dae29')
     pro = ts.pro_api()
-    df = pro.index_classify(level='L1', src='SW')['index code']
+    df = pro.index_classify(level='L' + str(level), src='SW')['index_code']
     industry_stock_list = {}
 
+    count = 1
     for i in df:
+        if count % 100 == 0:
+            time.sleep(60)
+        count += 1
         industry_stock_list[i] = pro.index_member(index_code=i)
     return industry_stock_list
 
@@ -110,7 +131,6 @@ def download_all_market_data(sqlname: str = 'data'):
         sqlname (str, optional): The name of the local db. Defaults to 'data'.
 
     """
-
     ts.set_token('267addf63a14adcfc98067fc253fbd72a728461706acf9474c0dae29')
     pro = ts.pro_api()
     LOG_FORMAT = "%(asctime)s====%(levelname)s++++%(message)s"
@@ -203,10 +223,158 @@ def download_all_market_data(sqlname: str = 'data'):
     return 'Done'
 
 
+def prep_data_for_cnn(industry_list, industry):
+    using_factor = ['low_adj', 'close_adj', 'open_adj', 'high_adj', 'pct_chg',
+                    'pe_ttm', 'vol', 'turnover_rate', 'float_share',
+                    'turnover_rate_f', 'pb', 'ps_ttm', 'volume_ratio',
+                    'adj_factor', 'buy_md_amount', 'buy_lg_vol',
+                    'sell_md_amount', 'sell_sm_vol', 'buy_sm_amount',
+                    'buy_md_vol', 'sell_sm_amount', 'sell_elg_vol',
+                    'buy_elg_amount', 'sell_md_vol', 'sell_lg_vol',
+                    'buy_elg_vol', 'sell_lg_amount', 'sell_elg_amount',
+                    'net_mf_vol', 'buy_lg_amount', 'buy_sm_vol',
+                    'net_mf_amount']
+    adjust_factor = ['low', 'close', 'open', 'high']
+    norm_factor = pd.DataFrame()
+    first = True
+
+    for stock in industry_list:
+        df = get_from_sql(stock_id=stock)
+        print(stock)
+        # print(df.head())
+        if df.shape[0] == 0:
+            continue
+
+        for item in adjust_factor:
+            df[item+'_adj'] = df[item] * df['adj_factor']
+
+        # If the factor required is not provided by the stock, then the stock
+        # is removed from the list.
+        if not set(using_factor).issubset(set(df.columns)):
+            print(stock)
+            continue
+        df = df[using_factor]
+
+        for i in range(1, 51):
+            df['close_last_'+str(i)+"_adj"] = df['close_adj'].shift(i)
+            df['open_last_'+str(i)+"_adj"] = df['open_adj'].shift(i)
+            df['high_last_'+str(i)+"_adj"] = df['high_adj'].shift(i)
+            df['low_last_'+str(i)+"_adj"] = df['low_adj'].shift(i)
+
+        for i in range(1, 11):
+            df['return_next_'+str(i)] = df['close_adj'].shift(-i)\
+                                        / df['close_adj']
+
+        df.dropna(axis=0, inplace=True)
+        target = df.iloc[:, -10:]
+        data = df.iloc[:, :-10]
+        target_train_temp = target.iloc[:-200]
+        data_train_temp = data.iloc[:-200]
+        target_test_temp = target.iloc[-200:]
+        data_test_temp = data.iloc[-200:]
+
+        norm_factor_temp = {}
+        norm_factor_temp['stock'] = stock
+        norm_factor_temp['high'] = np.max(data_train_temp['high_adj'])
+        norm_factor_temp['low'] = np.min(data_train_temp['low_adj'])
+        for item in data_train_temp:
+            if item[-3:] == 'adj':
+                data_train_temp[item] = (data_train_temp[item]
+                                    - norm_factor_temp['low'])\
+                                    / (norm_factor_temp['high']
+                                       - norm_factor_temp['low'])
+                data_test_temp[item] = (data_test_temp[item]
+                                   - norm_factor_temp['low'])\
+                                  / (norm_factor_temp['high']
+                                     - norm_factor_temp['low'])
+            else:
+                norm_factor_temp[item+'_high'] = np.max(data_train_temp[item])
+                norm_factor_temp[item+'_low'] = np.min(data_train_temp[item])
+                data_train_temp[item] = (data_train_temp[item]
+                                    - norm_factor_temp[item+'_low'])\
+                                   / (norm_factor_temp[item+'_high']
+                                      - norm_factor_temp[item+'_low'])
+                data_test_temp[item] = (data_test_temp[item]
+                                   - norm_factor_temp[item+'_low'])\
+                                  / (norm_factor_temp[item+'_high']
+                                     - norm_factor_temp[item+'_low'])
+        norm_factor = norm_factor.append(norm_factor_temp, ignore_index=True)
+        
+        if first:
+            target_train = target_train_temp.values
+            data_train = data_train_temp.values
+            target_test = target_test_temp.values
+            data_test = data_test_temp.values
+            first = False
+        else:
+            target_train = np.vstack((target_train, target_train_temp.values))
+            data_train = np.vstack((data_train, data_train_temp.values))
+            target_test = np.vstack((target_test, target_test_temp.values))
+            data_test = np.vstack((data_test, data_test_temp.values))
+
+    # writing the information to database
+    con = db.connect('D:\\Data\\CNN_industry.sqlite')
+    pd.DataFrame(data_train).dropna().to_sql(name=industry+"_data_train",
+                                             con=con,
+                                             if_exists='replace',
+                                             index=False
+                                             )
+    pd.DataFrame(data_test).dropna().to_sql(name=industry+"_data_test",
+                                            con=con,
+                                            if_exists='replace',
+                                            index=False
+                                            )
+    pd.DataFrame(target_train).dropna().to_sql(name=industry+"_target_train",
+                                               con=con,
+                                               if_exists='replace',
+                                               index=False
+                                               )
+    pd.DataFrame(target_test).dropna().to_sql(name=industry+"_target_train",
+                                              con=con,
+                                              if_exists='replace',
+                                              index=False
+                                              )
+    pd.DataFrame(norm_factor).dropna().to_sql(name=industry+"_norm_factor",
+                                              con=con,
+                                              if_exists='replace',
+                                              index=False
+                                              )
+    con.commit()
+    con.close()
+    print('Done')
+    return None
+
+
+def save_obj(obj, name):
+    with open(name + '.pkl', 'wb') as f:
+        pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
+
+
+def load_obj(name ):
+    with open(name + '.pkl', 'rb') as f:
+        return pickle.load(f)
+
+
+def save_industry_dict(level = 3):
+    industry_dict = get_industry_stock_list(level)
+    save_obj(industry_dict, 'industry_dict')
+
+
+def construct_data_for_cnn():
+    industry_dict = load_obj('industry_dict')
+    p = Pool()
+    print('start pooling')
+    for industry in industry_dict:
+        p.apply_async(prep_data_for_cnn,
+                      args=(industry_dict[industry]['con_code'], industry,))
+    p.close()
+    p.join()
+
+
 def main():
     download_all_market_data()
     print('done')
 
 
 if __name__ == '__main__':
-    main()
+    construct_data_for_cnn()
