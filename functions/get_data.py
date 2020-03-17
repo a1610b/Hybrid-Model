@@ -240,7 +240,6 @@ def prep_data_for_cnn(industry_list, industry):
 
     for stock in industry_list:
         df = get_from_sql(stock_id=stock)
-        print(stock)
         # print(df.head())
         if df.shape[0] == 0:
             continue
@@ -251,7 +250,6 @@ def prep_data_for_cnn(industry_list, industry):
         # If the factor required is not provided by the stock, then the stock
         # is removed from the list.
         if not set(using_factor).issubset(set(df.columns)):
-            print(stock)
             continue
         df = df[using_factor]
 
@@ -290,6 +288,9 @@ def prep_data_for_cnn(industry_list, industry):
             else:
                 norm_factor_temp[item+'_high'] = np.max(data_train_temp[item])
                 norm_factor_temp[item+'_low'] = np.min(data_train_temp[item])
+                if (norm_factor_temp[item+'_high'] == 
+                        norm_factor_temp[item+'_low']):
+                    norm_factor_temp[item+'_low'] = 0
                 data_train_temp[item] = (data_train_temp[item]
                                     - norm_factor_temp[item+'_low'])\
                                    / (norm_factor_temp[item+'_high']
@@ -299,7 +300,9 @@ def prep_data_for_cnn(industry_list, industry):
                                   / (norm_factor_temp[item+'_high']
                                      - norm_factor_temp[item+'_low'])
         norm_factor = norm_factor.append(norm_factor_temp, ignore_index=True)
-        
+        if data_train_temp.shape[0] != data_train_temp.dropna().shape[0]:
+            print('yes')
+            break
         if first:
             target_train = target_train_temp.values
             data_train = data_train_temp.values
@@ -329,7 +332,7 @@ def prep_data_for_cnn(industry_list, industry):
                                                if_exists='replace',
                                                index=False
                                                )
-    pd.DataFrame(target_test).dropna().to_sql(name=industry+"_target_train",
+    pd.DataFrame(target_test).dropna().to_sql(name=industry+"_target_test",
                                               con=con,
                                               if_exists='replace',
                                               index=False
@@ -365,8 +368,9 @@ def construct_data_for_cnn():
     p = Pool()
     print('start pooling')
     for industry in industry_dict:
-        p.apply_async(prep_data_for_cnn,
-                      args=(industry_dict[industry]['con_code'], industry,))
+        prep_data_for_cnn(industry_dict[industry]['con_code'], industry)
+        # p.apply_async(prep_data_for_cnn,
+        #              args=(industry_dict[industry]['con_code'], industry,))
     p.close()
     p.join()
 
