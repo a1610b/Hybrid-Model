@@ -56,11 +56,11 @@ class StockDataSet(Dataset):
 
 if __name__ == '__main__':
     industry_dict = get_data.load_obj('industry_dict')
-    model = SimpleNet(232, 50, 20, 10)
+    model = SimpleNet(232, 50, 20, 1)
     if torch.cuda.is_available():
         model = model.cuda()
 
-    criterion = nn.MSELoss()
+    criterion = nn.MSELoss().cuda()
     optimizer = optim.SGD(model.parameters(), lr=learning_rate)
     epoch = 0
     count = 0
@@ -74,7 +74,7 @@ if __name__ == '__main__':
                 continue
             target_train = get_data.get_from_sql(
                 stock_id=industry+'_target_train',
-                name='CNN_industry').values.astype(np.float32)
+                name='CNN_industry').values[:,0:1].astype(np.float32)
             characteristic = torch.from_numpy(data_train)
             label = torch.from_numpy(target_train)
             if characteristic.shape[0] < 2:
@@ -85,7 +85,7 @@ if __name__ == '__main__':
             else:
                 characteristic = Variable(characteristic)
                 label = Variable(label)
-            for j in range(1000):
+            for j in range(10000):
                 out = model(characteristic)
                 loss = criterion(out, label)
                 print_loss = loss.data.item()

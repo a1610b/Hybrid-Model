@@ -374,6 +374,120 @@ def construct_data_for_cnn():
     p.close()
     p.join()
 
+def construct_data_for_LSTM():
+    using_factor = ['low_adj', 'close_adj', 'open_adj', 'high_adj', 'pct_chg',
+                    'pe_ttm', 'vol', 'turnover_rate', 'float_share',
+                    'turnover_rate_f', 'pb', 'ps_ttm', 'volume_ratio',
+                    'adj_factor', 'buy_md_amount', 'buy_lg_vol',
+                    'sell_md_amount', 'sell_sm_vol', 'buy_sm_amount',
+                    'buy_md_vol', 'sell_sm_amount', 'sell_elg_vol',
+                    'buy_elg_amount', 'sell_md_vol', 'sell_lg_vol',
+                    'buy_elg_vol', 'sell_lg_amount', 'sell_elg_amount',
+                    'net_mf_vol', 'buy_lg_amount', 'buy_sm_vol',
+                    'net_mf_amount']
+    adjust_factor = ['low', 'close', 'open', 'high']
+
+    df = get_from_sql()
+    for stock in df:
+        norm_factor = pd.DataFrame()
+        # print(df.head())
+        if df[stock].shape[0] == 0:
+            continue
+
+        for item in adjust_factor:
+            df[stock][item+'_adj'] = df[stock][item] * df[stock]['adj_factor']
+
+        # If the factor required is not provided by the stock, then the stock
+        # is removed from the list.
+        if not set(using_factor).issubset(set(df[stock].columns)):
+            continue
+        df[stock] = df[stock][using_factor]
+
+        for i in range(1, 11):
+            df[stock]['close_last_'+str(i)+"_adj"] = df[stock]['close_adj'].shift(i)
+            df[stock]['open_last_'+str(i)+"_adj"] = df[stock]['open_adj'].shift(i)
+            df[stock]['high_last_'+str(i)+"_adj"] = df[stock]['high_adj'].shift(i)
+            df[stock]['low_last_'+str(i)+"_adj"] = df[stock]['low_adj'].shift(i)
+
+        for i in range(1, 11):
+            df[stock]['return_next_'+str(i)] = df[stock]['close_adj'].shift(-i)\
+                                        / df[stock]['close_adj']
+
+        df[stock].dropna(axis=0, inplace=True)
+        target = df[stock].iloc[:, -10:]
+        data = df[stock].iloc[:, :-10]
+        target_train_temp = target.iloc[:-200]
+        data_train_temp = data.iloc[:-200]
+        target_test_temp = target.iloc[-200:]
+        data_test_temp = data.iloc[-200:]
+
+        norm_factor_temp = {}
+        norm_factor_temp['stock'] = stock
+        norm_factor_temp['high'] = np.max(data_train_temp['high_adj'])
+        norm_factor_temp['low'] = np.min(data_train_temp['low_adj'])
+        for item in data_train_temp:
+            if item[-3:] == 'adj':
+                data_train_temp[item] = (data_train_temp[item]
+                                    - norm_factor_temp['low'])\
+                                    / (norm_factor_temp['high']
+                                       - norm_factor_temp['low'])
+                data_test_temp[item] = (data_test_temp[item]
+                                   - norm_factor_temp['low'])\
+                                  / (norm_factor_temp['high']
+                                     - norm_factor_temp['low'])
+            else:
+                norm_factor_temp[item+'_high'] = np.max(data_train_temp[item])
+                norm_factor_temp[item+'_low'] = np.min(data_train_temp[item])
+                if (norm_factor_temp[item+'_high'] == 
+                        norm_factor_temp[item+'_low']):
+                    norm_factor_temp[item+'_low'] = 0
+                data_train_temp[item] = (data_train_temp[item]
+                                    - norm_factor_temp[item+'_low'])\
+                                   / (norm_factor_temp[item+'_high']
+                                      - norm_factor_temp[item+'_low'])
+                data_test_temp[item] = (data_test_temp[item]
+                                   - norm_factor_temp[item+'_low'])\
+                                  / (norm_factor_temp[item+'_high']
+                                     - norm_factor_temp[item+'_low'])
+        norm_factor = norm_factor.append(norm_factor_temp, ignore_index=True)
+        if data_train_temp.shape[0] != data_train_temp.dropna().shape[0]:
+            print('yes')
+            continue
+        target_train = target_train_temp.values
+        data_train = data_train_temp.values
+        target_test = target_test_temp.values
+        data_test = data_test_temp.values
+
+        # writing the information to database
+        con = db.connect('D:\\Data\\LSTM_data.sqlite')
+        pd.DataFrame(data_train).dropna().to_sql(name=stock+"_data_train",
+                                                 con=con,
+                                                 if_exists='replace',
+                                                 index=False
+                                                 )
+        pd.DataFrame(data_test).dropna().to_sql(name=stock+"_data_test",
+                                                con=con,
+                                                if_exists='replace',
+                                                index=False
+                                                )
+        pd.DataFrame(target_train).dropna().to_sql(name=stock+"_target_train",
+                                                   con=con,
+                                                   if_exists='replace',
+                                                   index=False
+                                                   )
+        pd.DataFrame(target_test).dropna().to_sql(name=stock+"_target_test",
+                                                  con=con,
+                                                  if_exists='replace',
+                                                  index=False
+                                                  )
+        pd.DataFrame(norm_factor).dropna().to_sql(name=stock+"_norm_factor",
+                                                  con=con,
+                                                  if_exists='replace',
+                                                  index=False
+                                                  )
+        con.commit()
+        con.close()
+    return None
 
 def main():
     download_all_market_data()
@@ -381,4 +495,4 @@ def main():
 
 
 if __name__ == '__main__':
-    construct_data_for_cnn()
+    construct_data_for_LSTM()
