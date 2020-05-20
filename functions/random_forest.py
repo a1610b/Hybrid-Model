@@ -18,7 +18,7 @@ import math
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import KFold, cross_val_score
-import xgboost as xgb
+# import xgboost as xgb
 from sklearn.model_selection import GridSearchCV
 import talib
 from sklearn.ensemble import RandomForestClassifier
@@ -36,7 +36,8 @@ def divide_list(given_list, num):
     return result
 
 
-def calc_accr_rf(stock_list):
+def calc_accr_rf(stock_list, d):
+    warnings.filterwarnings("ignore")
     result_stock = pd.DataFrame()
     con = db.connect('D:\\Data\\rf_data_research_target.sqlite')
     target_list = [ 'industry_return_1d',
@@ -132,7 +133,7 @@ def calc_accr_rf(stock_list):
             y_pre = classifier.predict(test_x)
             temp_dict[target] = round(np.nanmean(y_pre == test_y), 4)
         result_stock = result_stock.append(temp_dict, ignore_index=True)
-    return result_stock
+    result_stock.to_csv('rf_result' + str(d) + '.csv')
     
 
 
@@ -147,14 +148,17 @@ def calc_accr():
     
     p = Pool()
     for i in range(24):
-        result.append(p.apply_async(calc_accr_rf, args=(stock_list_list[i],)))
+        result.append(p.apply_async(calc_accr_rf, args=(stock_list_list[i], i, )))
     p.close()
     p.join()
     
+    
     final_result = pd.DataFrame()
-    for i in result:
-        final_result = final_result.append(result[i])
+    for i in range(24):
+        temp = pd.read_csv('rf_result' + str(i) + '.csv')
+        final_result = final_result.append(temp)
     final_result.to_csv('rf_result.csv')
     
 if __name__ == '__main__':
+    warnings.filterwarnings("ignore")
     calc_accr()
