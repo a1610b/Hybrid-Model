@@ -223,6 +223,94 @@ def download_all_market_data(sqlname: str = 'data'):
     return 'Done'
 
 
+def get_sql_key(name: str = 'data'):
+    """
+    Get sql's key list
+    """
+    con = db.connect('D:\\Data\\' + name + '.sqlite')
+    cur = con.cursor()
+    cur.execute("select name from sqlite_master where type='table'")
+    stock_list = cur.fetchall()
+    stock_list = [line[0] for line in stock_list]
+    cur.close()
+    con.close()
+    return stock_list
+
+
+def download_all_market_data_finance(sqlname: str = 'data_finance'):
+    """
+    Download stock's fiancial data exist in tushare database.
+
+    Args:
+        sqlname (str, optional): The name of the local db. Defaults to 'data'.
+
+    """
+    ts.set_token('267addf63a14adcfc98067fc253fbd72a728461706acf9474c0dae29')
+    pro = ts.pro_api()
+
+    basic = 'ts_code,ann_date,end_date,dt_eps'
+    growth = 'roe_yoy,q_gr_yoy,q_sales_yoy,q_op_yoy,q_profit_yoy,q_netprofit_yoy,ocf_yoy,equity_yoy'
+    balance_sheet = 'current_ratio,quick_ratio,cash_ratio,cash_to_liqdebt,cash_to_liqdebt_withinterest,ca_to_assets,tbassets_to_totalassets,int_to_talcap,currentdebt_to_debt,longdeb_to_debt,ocf_to_shortdebt,debt_to_eqt,tangibleasset_to_debt,tangasset_to_intdebt,tangibleasset_to_netdebt,ocf_to_debt,ocf_to_interestdebt,longdebt_to_workingcapital,ebitda_to_debt'
+    cashflow = 'inv_turn,ar_turn,ca_turn,fa_turn,assets_turn,ocf_to_or,ocf_to_opincome,q_ocf_to_or,q_ocf_to_sales'
+    profit_quality = 'q_npta,tax_to_ebt,q_netprofit_margin,q_gsprofit_margin,q_exp_to_sales,q_profit_to_gr,q_saleexp_to_gr,q_adminexp_to_gr,q_finaexp_to_gr,q_impair_to_gr_ttm,q_gc_to_gr,q_op_to_gr,q_roe,q_dt_roe,q_opincome_to_ebt,q_investincome_to_ebt,q_dtprofit_to_profit,q_salescash_to_or'
+    need_further_calc = 'rd_exp,fcfe'
+    # Get stock ID of the stock that are now trading(L), suspend trading(P)
+    # and delisted(D)
+    stock_list = set(pro.stock_basic(exchange='',
+                                     list_status='D',
+                                     fields='ts_code')['ts_code']) \
+        | set(pro.stock_basic(exchange='',
+                              list_status='L',
+                              fields='ts_code')['ts_code']) \
+        | set(pro.stock_basic(exchange='',
+                              list_status='P',
+                              fields='ts_code')['ts_code'])
+
+    con = db.connect('D:\\Data\\'+sqlname+'.sqlite')
+    cur = con.cursor()
+
+    count = 0
+    stock_list = list(stock_list)[::-1]
+    one_percent = int(len(stock_list) / 100)
+    for i in stock_list:
+        try:
+            # Avoid calling tushare too frequent
+            count += 1
+            '''
+            if count % 10 == 0:
+                time.sleep(10)
+            '''
+
+            # Show the progress of the downloading
+            if count % one_percent == 0:
+                print(count / one_percent)
+                if (count / one_percent + 1) % 10 == 0:
+                    time.sleep(60)
+                
+
+            stock_data = pro.fina_indicator(ts_code=i, fields=basic+','+growth+','+balance_sheet+','+cashflow+','+profit_quality+','+need_further_calc)
+
+            stock_data.drop_duplicates(subset='ann_date', keep='first', inplace=True)
+
+            # Ignore stock that don't have data yet
+            if stock_data.shape[0] == 0:
+                continue
+
+            # Write in the database
+            stock_data.to_sql(
+                name=i,
+                con=con,
+                if_exists='replace',
+                index=False
+                )
+            con.commit()
+        except Exception:
+            print(i)
+    cur.close()
+    con.close()
+    return 'Done'
+
+
 def prep_data_for_cnn(industry_list, industry):
     using_factor = ['low_adj', 'close_adj', 'open_adj', 'high_adj', 'pct_chg',
                     'pe_ttm', 'vol', 'turnover_rate', 'float_share',
@@ -489,10 +577,16 @@ def construct_data_for_LSTM():
         con.close()
     return None
 
+
+def construct_data_for_hybrid():
+    df = get_from_sql(stock_id='600419.SH')
+    listed_date = df['trade_date']
+
+
 def main():
     download_all_market_data()
     print('done')
 
 
 if __name__ == '__main__':
-    construct_data_for_LSTM()
+    download_all_market_data_finance()
