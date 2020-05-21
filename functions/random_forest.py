@@ -50,89 +50,108 @@ def calc_accr_rf(stock_list, d):
     train_end_date = '20180101'
     
     for stock in stock_list:
-        print(stock)
-        data_train_x = get_data.get_from_sql(stock_id=stock,
-                                             name='rf_data_research')
-        data_train_x.rename(columns={'index': 'date'}, inplace=True)
-        data_train_x.drop(['return_1d', 'return_5d', 'return_20d'],
-                          inplace=True,
-                          axis=1)
-        data_train_y = pd.read_sql_query(
-            sql="SELECT * FROM Processed_data WHERE tick = '" + stock + "'",
-            con=con)
-        data_set = pd.merge(data_train_x,
-                            data_train_y,
-                            left_on='date',
-                            right_on='date',
-                            how='inner')
-        data_set.fillna(0, inplace=True)
-        temp_dict = {'tick': stock}
+        try:
+            data_train_x = get_data.get_from_sql(stock_id=stock,
+                                                 name='rf_data_research')
+            data_train_x.rename(columns={'index': 'date'}, inplace=True)
+            data_train_x.drop(['return_1d', 'return_5d', 'return_20d'],
+                              inplace=True,
+                              axis=1)
+            data_train_y = pd.read_sql_query(
+                sql="SELECT * FROM Processed_data WHERE tick = '" + stock + "'",
+                con=con)
+            data_set = pd.merge(data_train_x,
+                                data_train_y,
+                                left_on='date',
+                                right_on='date',
+                                how='inner')
+            data_set.fillna(0, inplace=True)
+            temp_dict = {'tick': stock}
+            
+            for target in target_list:
+                data_set_working = data_set[list(data_train_x.columns) + [target]]
+                data_set_working = data_set_working[data_set_working[target] != 0]
+                data_set_x = data_set_working[data_train_x.columns]
+                data_set_y = data_set_working[['date', target]]
         
-        for target in target_list:
-            data_set_working = data_set[list(data_train_x.columns) + [target]]
-            data_set_working = data_set_working[data_set_working[target] != 0]
-            data_set_x = data_set_working[data_train_x.columns]
-            data_set_y = data_set_working[['date', target]]
-    
-            train_data_set = data_set_working[
-                data_set_working['date'] < train_end_date]
-            if train_data_set.shape[0] < 500:
-                break
-            test_data_set = data_set_working[
-                data_set_working['date'] >= train_end_date]
-            if train_data_set.shape[0] < 100:
-                break        
-            train_data_set['target'] = -1
-            train_data_set.loc[train_data_set[
-                train_data_set[target] >= 0.7].index, 'target'] = 1
-            train_data_set.loc[train_data_set[
-                train_data_set[target] <= 0.3].index, 'target'] = 0
-            train_data_set = train_data_set[train_data_set['target'] >= 0]
-            train_x = train_data_set[data_train_x.columns].drop('date', axis=1)
-            train_x[np.isinf(train_x)] = 0
-            train_y = train_data_set['target']
-    
-            test_x = test_data_set[data_train_x.columns].drop('date', axis=1)
-            test_x[np.isinf(test_x)] = 0
-            test_y = (test_data_set[target] > 0.5).astype(int)
-            
-            classifier = RandomForestClassifier(min_samples_leaf = 100, n_estimators=200,random_state=0, n_jobs=-1, class_weight='balanced_subsample')
-            classifier.fit(train_x, train_y)
-            y_pre = classifier.predict(test_x)
-            temp_dict[target] = round(np.nanmean(y_pre == test_y), 4)
-        for target in target_list_abs:
-            data_set_working = data_set[list(data_train_x.columns) + [target]]
-            data_set_working = data_set_working[data_set_working[target] != 0]
-            data_set_x = data_set_working[data_train_x.columns]
-            data_set_y = data_set_working[['date', target]]
-    
-            train_data_set = data_set_working[
-                data_set_working['date'] < train_end_date]
-            if train_data_set.shape[0] < 500:
-                break
-            test_data_set = data_set_working[
-                data_set_working['date'] >= train_end_date]
-            if train_data_set.shape[0] < 100:
-                break        
-            train_data_set['target'] = -1
-            train_data_set.loc[train_data_set[
-                train_data_set[target] >= 0].index, 'target'] = 1
-            train_data_set.loc[train_data_set[
-                train_data_set[target] <= 0].index, 'target'] = 0
-            train_data_set = train_data_set[train_data_set['target'] >= 0]
-            train_x = train_data_set[data_train_x.columns].drop('date', axis=1)
-            train_x[np.isinf(train_x)] = 0
-            train_y = train_data_set['target']
-    
-            test_x = test_data_set[data_train_x.columns].drop('date', axis=1)
-            test_x[np.isinf(test_x)] = 0
-            test_y = (test_data_set[target] >= 0).astype(int)
-            
-            classifier = RandomForestClassifier(min_samples_leaf = 100, n_estimators=200,random_state=0, n_jobs=-1, class_weight='balanced_subsample')
-            classifier.fit(train_x, train_y)
-            y_pre = classifier.predict(test_x)
-            temp_dict[target] = round(np.nanmean(y_pre == test_y), 4)
-        result_stock = result_stock.append(temp_dict, ignore_index=True)
+                train_data_set = data_set_working[
+                    data_set_working['date'] < train_end_date]
+                if train_data_set.shape[0] < 500:
+                    break
+                test_data_set = data_set_working[
+                    data_set_working['date'] >= train_end_date]
+                if train_data_set.shape[0] < 100:
+                    break        
+                train_data_set['target'] = -1
+                train_data_set.loc[train_data_set[
+                    train_data_set[target] >= 0.7].index, 'target'] = 1
+                train_data_set.loc[train_data_set[
+                    train_data_set[target] <= 0.3].index, 'target'] = 0
+                train_data_set = train_data_set[train_data_set['target'] >= 0]
+                train_x = train_data_set[data_train_x.columns].drop('date', axis=1)
+                train_x[np.isinf(train_x)] = 0
+                train_y = train_data_set['target']
+        
+                test_x = test_data_set[data_train_x.columns].drop('date', axis=1)
+                test_x[np.isinf(test_x)] = 0
+                test_y = (test_data_set[target] > 0.5).astype(int)
+                
+                classifier = RandomForestClassifier(min_samples_leaf = 100, n_estimators=200,random_state=0, n_jobs=-1, class_weight='balanced_subsample')
+                classifier.fit(train_x, train_y)
+                y_pre = classifier.predict(test_x)
+                temp_dict[target] = round(np.nanmean(y_pre == test_y), 4)
+                
+                prob_y = classifier.predict_proba(test_x)
+                prob_y = prob_y[:, 1]
+                if not (prob_y <= 0.5).all():
+                    prob_y[prob_y >= np.percentile(prob_y[prob_y>0.5], 70)] = 1
+                if not (prob_y >= 0.5).all():
+                    prob_y[prob_y <= np.percentile(prob_y[prob_y<0.5], 30)] = 0
+                temp_dict[target+'_enhanced'] = round(np.nanmean((prob_y == test_y)) / 0.3, 4)
+            for target in target_list_abs:
+                data_set_working = data_set[list(data_train_x.columns) + [target]]
+                data_set_working = data_set_working[data_set_working[target] != 0]
+                data_set_x = data_set_working[data_train_x.columns]
+                data_set_y = data_set_working[['date', target]]
+        
+                train_data_set = data_set_working[
+                    data_set_working['date'] < train_end_date]
+                if train_data_set.shape[0] < 500:
+                    break
+                test_data_set = data_set_working[
+                    data_set_working['date'] >= train_end_date]
+                if train_data_set.shape[0] < 100:
+                    break        
+                train_data_set['target'] = -1
+                train_data_set.loc[train_data_set[
+                    train_data_set[target] >= 0].index, 'target'] = 1
+                train_data_set.loc[train_data_set[
+                    train_data_set[target] <= 0].index, 'target'] = 0
+                train_data_set = train_data_set[train_data_set['target'] >= 0]
+                train_x = train_data_set[data_train_x.columns].drop('date', axis=1)
+                train_x[np.isinf(train_x)] = 0
+                train_y = train_data_set['target']
+        
+                test_x = test_data_set[data_train_x.columns].drop('date', axis=1)
+                test_x[np.isinf(test_x)] = 0
+                test_y = (test_data_set[target] >= 0).astype(int)
+                
+                classifier = RandomForestClassifier(min_samples_leaf = 200, n_estimators=500,random_state=0, n_jobs=-1, class_weight='balanced_subsample')
+                classifier.fit(train_x, train_y)
+                y_pre = classifier.predict(test_x)
+                temp_dict[target] = round(np.nanmean(y_pre == test_y), 4)
+                
+                prob_y = classifier.predict_proba(test_x)
+                prob_y = prob_y[:, 1]
+                if not (prob_y <= 0.5).all():
+                    prob_y[prob_y >= np.percentile(prob_y[prob_y>0.5], 70)] = 1
+                if not (prob_y >= 0.5).all():
+                    prob_y[prob_y <= np.percentile(prob_y[prob_y<0.5], 30)] = 0
+                temp_dict[target+'_enhanced'] = round(np.nanmean((prob_y == test_y)) / 0.3, 4)
+            result_stock = result_stock.append(temp_dict, ignore_index=True)
+        except Exception as e:
+            print(stock)
+            print(repr(e))
     result_stock.to_csv('rf_result' + str(d) + '.csv')
     
 
