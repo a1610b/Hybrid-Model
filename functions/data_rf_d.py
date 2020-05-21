@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-import sys
 import os
-sys.path.append('D:\Code\Hybrid Model')
 import sqlite3 as db
 from multiprocessing import Pool
 import pandas as pd
@@ -13,6 +11,17 @@ import talib
 
 
 def prep_data_for_rf_improve(stock_list, const):
+    """
+    Calculate the daily indicators for stocks in the given stock_list.
+
+    Args:
+        stock_list (list): The stocks that need to be calculated.
+        const (TYPE): Multiprocessing id.
+
+    Returns:
+        None.
+
+    """
     con = db.connect('D:\\Data\\rf_data_research_'+str(const)+'.sqlite')
     for stock in stock_list:
         try:
@@ -23,9 +32,9 @@ def prep_data_for_rf_improve(stock_list, const):
             df_f.set_index('ann_date', inplace=True)
             df_f = df_f[::-1]
             df_f = df_f.drop(['ts_code', 'end_date', 'dt_eps'], axis=1)
-            df_m = pd.merge(df_f, df, right_index = True, left_index=True,how='outer')
+            df_m = pd.merge(df_f, df, right_index = True, left_index=True, how='outer')
             df_m.fillna(method='ffill', inplace=True)
-            df_m['pct_chg'] = (df_m['close'] / df_m['pre_close'] - 1) * 100 
+            df_m['pct_chg'] = (df_m['close'] / df_m['pre_close'] - 1) * 100
             for i in ['high', 'low', 'close', 'open']:
                 df_m[i + '_adj'] = df_m[i] * df_m['adj_factor']
             df_m['pre_close_adj'] = df_m['close_adj'] / (df_m['pct_chg'] / 100 + 1)
@@ -51,28 +60,37 @@ def prep_data_for_rf_improve(stock_list, const):
                                        timeperiod=28)
             df_m['WILLR'] = talib.WILLR(df_m['high_adj'], df_m['low_adj'],
                                         df_m['close_adj'])
-        
+
             df_m['SMA5'] = (talib.MA(df_m['close_adj'], timeperiod=5) - df_m['close_adj']) / df_m['close_adj']
             df_m['SMA20'] = (talib.MA(df_m['close_adj'], timeperiod=20) - df_m['close_adj']) / df_m['close_adj']
             df_m['SMA60'] = (talib.MA(df_m['close_adj'], timeperiod=60) - df_m['close_adj']) / df_m['close_adj']
             df_m['SMA20_5'] = (talib.MA(df_m['close_adj'], timeperiod=20) - df_m['SMA5']) / df_m['SMA5']
             df_m['SMA60_5'] = (talib.MA(df_m['close_adj'], timeperiod=60) - df_m['SMA5']) / df_m['SMA5']
             df_m['SMA60_20'] = (talib.MA(df_m['close_adj'], timeperiod=60) - df_m['SMA20']) / df_m['SMA20']
-        
+
             df_m['SMA5_tr'] = talib.MA(df_m['turnover_rate'], timeperiod=5)
             df_m['SMA20_tr'] = talib.MA(df_m['turnover_rate'], timeperiod=20)
             df_m['SMA60_tr'] = talib.MA(df_m['turnover_rate'], timeperiod=60)
             df_m['SMA250_tr'] = talib.MA(df_m['turnover_rate'], timeperiod=250)
-            df_m['SMA5_tr_tr'] = (talib.MA(df_m['turnover_rate'], timeperiod=5) - df_m['turnover_rate']) / df_m['turnover_rate']
-            df_m['SMA20_tr_tr'] = (talib.MA(df_m['turnover_rate'], timeperiod=20) - df_m['turnover_rate']) / df_m['turnover_rate']
-            df_m['SMA60_tr_tr'] = (talib.MA(df_m['turnover_rate'], timeperiod=60) - df_m['turnover_rate']) / df_m['turnover_rate']
-            df_m['SMA250_tr_tr'] = (talib.MA(df_m['turnover_rate'], timeperiod=250) - df_m['turnover_rate']) / df_m['turnover_rate']
-            df_m['SMA20_SMA5_tr'] = (talib.MA(df_m['turnover_rate'], timeperiod=20) - df_m['SMA5_tr']) / df_m['SMA5_tr']
-            df_m['SMA60_SMA5_tr'] = (talib.MA(df_m['turnover_rate'], timeperiod=60) - df_m['SMA5_tr']) / df_m['SMA5_tr']
-            df_m['SMA250_SMA5_tr'] = (talib.MA(df_m['turnover_rate'], timeperiod=250) - df_m['SMA5_tr']) / df_m['SMA5_tr']
-            df_m['SMA60_SMA20_tr'] = (talib.MA(df_m['turnover_rate'], timeperiod=60) - df_m['SMA20_tr']) / df_m['SMA20_tr']
-            df_m['SMA250_SMA20_tr'] = (talib.MA(df_m['turnover_rate'], timeperiod=250) - df_m['SMA20_tr']) / df_m['SMA20_tr']
-        
+            df_m['SMA5_tr_tr'] = (talib.MA(df_m['turnover_rate'], timeperiod=5)
+                                  - df_m['turnover_rate']) / df_m['turnover_rate']
+            df_m['SMA20_tr_tr'] = (talib.MA(df_m['turnover_rate'], timeperiod=20)
+                                   - df_m['turnover_rate']) / df_m['turnover_rate']
+            df_m['SMA60_tr_tr'] = (talib.MA(df_m['turnover_rate'], timeperiod=60)
+                                   - df_m['turnover_rate']) / df_m['turnover_rate']
+            df_m['SMA250_tr_tr'] = (talib.MA(df_m['turnover_rate'], timeperiod=250)
+                                    - df_m['turnover_rate']) / df_m['turnover_rate']
+            df_m['SMA20_SMA5_tr'] = (talib.MA(df_m['turnover_rate'], timeperiod=20)
+                                     - df_m['SMA5_tr']) / df_m['SMA5_tr']
+            df_m['SMA60_SMA5_tr'] = (talib.MA(df_m['turnover_rate'], timeperiod=60)
+                                     - df_m['SMA5_tr']) / df_m['SMA5_tr']
+            df_m['SMA250_SMA5_tr'] = (talib.MA(df_m['turnover_rate'], timeperiod=250)
+                                      - df_m['SMA5_tr']) / df_m['SMA5_tr']
+            df_m['SMA60_SMA20_tr'] = (talib.MA(df_m['turnover_rate'], timeperiod=60)
+                                      - df_m['SMA20_tr']) / df_m['SMA20_tr']
+            df_m['SMA250_SMA20_tr'] = (talib.MA(df_m['turnover_rate'], timeperiod=250)
+                                       - df_m['SMA20_tr']) / df_m['SMA20_tr']
+
             df_m['corr_close_vol_20'] = talib.CORREL(df_m['close_adj'],
                                                      df_m['vol'],
                                                      timeperiod=20)
@@ -89,12 +107,12 @@ def prep_data_for_rf_improve(stock_list, const):
             df_m['MOM_250'] = talib.MOM(df_m['close_adj'], timeperiod=250) / df_m['close_adj'].shift(250)
             df_m['t_1_t_6'] = (talib.MOM(df_m['close_adj'], timeperiod=100) / df_m['close_adj'].shift(100)).shift(20)
             df_m['t_6_t_12'] = (talib.MOM(df_m['close_adj'], timeperiod=120) / df_m['close_adj'].shift(120)).shift(120)
-        
+
             df_m['close_kurt_20'] = df_m['pct_chg'].rolling(20).kurt()
             df_m['close_kurt_60'] = df_m['pct_chg'].rolling(60).kurt()
             df_m['close_skew_20'] = df_m['pct_chg'].rolling(20).skew()
             df_m['close_skew_60'] = df_m['pct_chg'].rolling(60).skew()
-        
+
             df_m['open_close_5'] = (df_m['close_adj'] / df_m['open_adj'] -
                                     1).rolling(5).mean()
             df_m['open_close_20'] = (df_m['close_adj'] / df_m['open_adj'] -
@@ -119,14 +137,14 @@ def prep_data_for_rf_improve(stock_list, const):
                                          1).rolling(20).mean()
             df_m['open_pre_close_60'] = (df_m['open_adj'] / df_m['pre_close_adj'] -
                                          1).rolling(60).mean()
-        
+
             df_m['trend_strength_20'] = df_m['MOM_20'] / np.abs(
                 df_m['close_adj'] - df_m['pre_close_adj']).rolling(20).sum()
-        
+
             df_m['return_1d'] = (df_m['close_adj'].shift(-1) - df_m['close_adj']) / df_m['close_adj']
             df_m['return_5d'] = (df_m['close_adj'].shift(-5) - df_m['close_adj']) / df_m['close_adj']
             df_m['return_20d'] = (df_m['close_adj'].shift(-20) - df_m['close_adj']) / df_m['close_adj']
-        
+
             df_m.to_sql(
                 name=stock,
                 con=con,
@@ -141,23 +159,30 @@ def prep_data_for_rf_improve(stock_list, const):
 
 
 def gather_target_df():
+    """
+    Gather the return information from the downloaded sql and give each day a label.
+
+    Returns:
+        None.
+
+    """
     con = db.connect('D:\\Data\\rf_data_research_target.sqlite')
-    
+
     dict_industry = get_data.get_industry_stock_list()
     data_list = get_data.get_sql_key()
     data_f_list = get_data.get_sql_key(name='data_finance')
     data_l = set(data_list)
-    
+
     for i in dict_industry:
         dict_industry[i] = list(dict_industry[i]['con_code'])
         data_l = data_l - set(dict_industry[i]['con_code'])
     dict_industry['None'] = list(data_l)
-    
+
     result = pd.DataFrame()
     for industry in dict_industry:
         for stock in dict_industry[industry]['con_code']:
             if (stock not in data_f_list) or (stock not in data_list):
-                 continue
+                continue
             df = get_data.get_from_sql(stock_id=stock)
             df_m = pd.DataFrame()
             df_m['close_adj'] = df['close'] * df['adj_factor']
@@ -168,8 +193,8 @@ def gather_target_df():
             df_m = df_m[['return_1d', 'return_5d', 'return_20d', 'tick']]
             df_m['industry'] = industry
             df_m['date'] = df['trade_date']
-            result = result.append(df_m) 
-    
+            result = result.append(df_m)
+
     result.to_sql(
         name='All_Data',
         con=con,
@@ -178,503 +203,6 @@ def gather_target_df():
     )
     con.commit()
     con.close()
-
-
-def prep_data_for_rf(stock_list, dict_industry, calendar, i, dict_300, dict_500):
-    con = db.connect('D:\\Data\\rf_temp_'+str(i)+'.sqlite')
-    cur = con.cursor()
-    for stock in stock_list:
-        try:
-            df = get_data.get_from_sql(stock_id=stock)
-            df_f = get_data.get_from_sql(stock_id=stock, name='data_finance')
-            df.set_index('trade_date', inplace=True)
-            df_f.set_index('ann_date', inplace=True)
-            listed_date = df.index[0]
-            usable = max(change_month(listed_date, 13), '20070101')
-            if (usable > '20200101') or (usable > str(df.index[-1])):
-                continue
-            if 'turnover_rate_f' not in df.columns:
-                df['turnover_rate_f'] = df['turnover_rate']
-            first_date = df.index[df.index >= usable][0]
-            current_date = first_date
-            df['pct_chg'] = (df['close'] / df['pre_close'] - 1) * 100
-            data = pd.DataFrame()
-            while (current_date <= '20200101') and (current_date < df.index[-30]):
-                # stock_date = df.index[df.index >= current_date][0]
-                '''
-                if stock_date != current_date:
-                    # If the stock is not trading in the first trading day of the month,
-                    # we don't collect its data and won't do trading on that stock this month.
-                    continue
-                '''
-                last_trading_day = df.index[df.index < current_date][-1]
-                existing_data = df.loc[: last_trading_day]
-                last_year = change_month(current_date, -12)
-                last_month = change_month(current_date, -1)
-                last_year = df.index[df.index >= last_year][0]
-                last_month = df.index[df.index >= last_month][0]
-                last_year_df = df.loc[last_year: last_trading_day]
-                last_month_df = df.loc[last_month: last_trading_day]
-                f_date = df_f.index[df_f.index <= current_date][0]
-                next_date = df.index[df.index > current_date][0]
-                next_5d = df.index[df.index > current_date][4]
-                last_5d = df.index[df.index < current_date][-5]
-            
-                price = df.loc[last_trading_day, 'close'] * df.loc[last_trading_day, 'adj_factor']
-                if df_f.loc[f_date, 'rd_exp'] and df.loc[last_trading_day, 'total_mv'] and df.loc[last_trading_day, 'pe_ttm']:
-                    rd_exp_to_earning = df_f.loc[f_date, 'rd_exp']\
-                        / df.loc[last_trading_day, 'total_mv']\
-                        * df.loc[last_trading_day, 'pe_ttm']
-                else:
-                    rd_exp_to_earning = np.nan
-                if df_f.loc[f_date, 'fcfe'] and df.loc[last_trading_day, 'total_mv']:
-                    fcfe = df_f.loc[f_date, 'fcfe'] / df.loc[last_trading_day, 'total_mv'] / 10000
-                else:
-                    fcfe = np.nan
-            
-                if df.index[df.index > next_date].shape[0] == 0:
-                    break
-                return_rate_1d = df.loc[next_date, 'close'] / df.loc[next_date, 'pre_close'] - 1
-                return_rate_5d = df.loc[next_5d, 'close'] * df.loc[next_5d, 'adj_factor'] / (df.loc[current_date, 'close'] * df.loc[current_date, 'adj_factor']) - 1
-                return_rate_1m = cal_return(current_date, 1, 0, df)
-            
-                return_last_1d = df.loc[last_trading_day, 'close'] / df.loc[last_trading_day, 'pre_close'] - 1
-                return_last_5d = price / (df.loc[last_5d, 'close'] * df.loc[last_5d, 'adj_factor']) - 1
-            
-                if np.mean(np.abs(existing_data['close'][-3:] - existing_data['pre_close'][-3:])) == 0:
-                    rsi_3 = 100
-                else:
-                    rsi_3 = 100 * np.mean(existing_data['adj_factor'][-3:] * np.maximum(existing_data['close'][-3:] - existing_data['pre_close'][-3:], 0)) / np.mean(existing_data['adj_factor'][-3:] * np.abs(existing_data['close'][-3:] - existing_data['pre_close'][-3:]))
-                if rsi_3 > 70:
-                    rsi_3_adj = 50 - rsi_3
-                elif rsi_3 > 50:
-                    rsi_3_adj = rsi_3 - 50
-                elif rsi_3 > 30:
-                    rsi_3_adj = 30 - rsi_3 
-                else:
-                    rsi_3_adj = 20 + rsi_3 
-            
-                if np.mean(np.abs(existing_data['close'][-14:] - existing_data['pre_close'][-14:])) == 0:
-                    rsi_14 = 100
-                else:
-                    rsi_14 = 100 * np.mean(existing_data['adj_factor'][-14:] * np.maximum(existing_data['close'][-14:] - existing_data['pre_close'][-14:], 0)) / np.mean(existing_data['adj_factor'][-14:] * np.abs(existing_data['close'][-14:] - existing_data['pre_close'][-14:]))
-                if rsi_14 > 70:
-                    rsi_14_adj = 50 - rsi_14
-                elif rsi_14 > 50:
-                    rsi_14_adj = rsi_14 - 50
-                elif rsi_14 > 30:
-                    rsi_14_adj = 30 - rsi_14 
-                else:
-                    rsi_14_adj = 20 + rsi_14 
-            
-                rsi_28 = 100 * np.mean(existing_data['adj_factor'][-28:] * np.maximum(existing_data['close'][-28:] - existing_data['pre_close'][-28:], 0)) / np.mean(existing_data['adj_factor'][-28:] * np.abs(existing_data['close'][-28:] - existing_data['pre_close'][-28:]))
-                if rsi_28 > 70:
-                    rsi_28_adj = 50 - rsi_28
-                elif rsi_28 > 50:
-                    rsi_28_adj = rsi_28 - 50
-                elif rsi_28 > 30:
-                    rsi_28_adj = 30 - rsi_28 
-                else:
-                    rsi_28_adj = 20 + rsi_28 
-            
-                obv = np.sum(np.sign(last_month_df['close'] - last_month_df['pre_close']) * last_month_df['vol'])
-            
-                if last_month_df.shape[0] <= 10:
-                    return_var_month_realized = np.nan
-                    return_skew_month_realized = np.nan
-                    return_kurt_month_realized = np.nan
-                    avg_tr_last_month = np.nan
-                    avg_tr_last_month_avg_tr_last_year = np.nan
-                    return_var_month = np.nan
-                    return_skew_month = np.nan
-                    return_kurt_month = np.nan
-                    return_d_var_month = np.nan
-                    return_u_var_month = np.nan
-                    return_d_var_var_month = np.nan
-                    t_t_1 = np.nan
-                    max_return_last_month = np.nan
-                    corr_vol_close_month = np.nan
-                    corr_vol_high_month = np.nan
-                    corr_vol_open_month = np.nan
-                    corr_vol_low_month = np.nan
-                    high_open_month = np.nan
-                    close_low_month = np.nan
-                    trend_strength_month = np.nan
-                else:
-                    if np.isnan(last_month_df['turnover_rate_f']).all():
-                        last_month_df.loc['turnover_rate_f'] = last_month_df['turnover_rate']
-                    return_var_month_realized = np.nanmean(last_month_df['pct_chg'] ** 2)
-                    return_skew_month_realized = np.nanmean(last_month_df['pct_chg'] ** 3)\
-                        / (return_var_month_realized ** 1.5)
-                    return_kurt_month_realized = np.nanmean(last_month_df['pct_chg'] ** 4)\
-                        / (return_var_month_realized ** 2)
-                    avg_tr_last_month = np.nanmean(last_month_df['turnover_rate_f'])
-                    avg_tr_last_month_avg_tr_last_year = np.nanmean(
-                        last_month_df['turnover_rate_f']) / np.nanmean(last_year_df['turnover_rate_f'])
-                    return_var_month = last_month_df['pct_chg'].var()
-                    return_skew_month = last_month_df['pct_chg'].skew()
-                    return_kurt_month = last_month_df['pct_chg'].kurt()
-                    return_d_var_month = d_var(last_month_df['pct_chg'])
-                    return_u_var_month = u_var(last_month_df['pct_chg'])
-                    return_d_var_var_month = return_d_var_month / return_var_month
-                    t_t_1 = cal_return(current_date, 0, -1, df)
-                    max_return_last_month = np.nanmax(last_month_df['pct_chg'])
-                    corr_vol_close_month = corrcoef(last_month_df['vol'],
-                                                    last_month_df['adj_factor'] * last_month_df['close'])
-                    corr_vol_high_month = corrcoef(last_month_df['vol'],
-                                                   last_month_df['adj_factor'] * last_month_df['high'])
-                    corr_vol_open_month = corrcoef(last_month_df['vol'],
-                                                   last_month_df['adj_factor'] * last_month_df['open'])
-                    corr_vol_low_month = corrcoef(last_month_df['vol'],
-                                                  last_month_df['adj_factor'] * last_month_df['low'])
-                    high_open_month = np.nanmean(last_month_df['high'] / last_month_df['open'])
-                    close_low_month = np.nanmean(last_month_df['close'] / last_month_df['low'])
-                    trend_strength_month = (last_month_df['close'][-1] - last_month_df['pre_close'][0])\
-                        / np.nansum(np.abs(last_month_df['close'] - last_month_df['pre_close']))
-                if last_year_df.shape[0] <= 20:
-                    return_var_year_realized = np.nan
-                    return_skew_year_realized = np.nan
-                    return_kurt_year_realized = np.nan
-                    return_var_year = np.nan
-                    return_skew_year = np.nan
-                    return_kurt_year = np.nan
-                    return_d_var_year = np.nan
-                    return_u_var_year = np.nan
-                    return_d_var_var_year = np.nan
-                    std_tr_last_year = np.nan
-                    avg_abs_return_tr_last_year = np.nan
-                    close_last_year_high = np.nan
-                    max_return_last_year = np.nan
-                    corr_vol_close_year = np.nan
-                    corr_vol_high_year = np.nan
-                    corr_vol_open_year = np.nan
-                    corr_vol_low_year = np.nan
-                    high_open_year = np.nan
-                    close_low_year = np.nan
-                    trend_strength_year = np.nan
-                    ma20_price = np.nan
-                    ma20_ma5 = np.nan
-                    SO_k = np.nan
-                else:
-                    if np.isnan(last_year_df['turnover_rate_f']).all():
-                        last_year_df.loc['turnover_rate_f'] = last_year_df['turnover_rate']
-                    return_var_year_realized = np.nanmean(last_year_df['pct_chg'] ** 2)
-                    return_skew_year_realized = np.nanmean(last_year_df['pct_chg'] ** 3)\
-                        / (return_var_year_realized ** 1.5)
-                    return_kurt_year_realized = np.nanmean(last_year_df['pct_chg'] ** 4)\
-                        / (return_var_year_realized ** 2)
-                    return_var_year = last_year_df['pct_chg'].var()
-                    return_skew_year = last_year_df['pct_chg'].skew()
-                    return_kurt_year = last_year_df['pct_chg'].kurt()
-                    return_d_var_year = d_var(last_year_df['pct_chg'])
-                    return_u_var_year = u_var(last_year_df['pct_chg'])
-                    return_d_var_var_year = return_d_var_year / return_var_year
-                    std_tr_last_year = np.nanstd(last_year_df['turnover_rate_f'])
-                    avg_abs_return_tr_last_year = np.nanmean(np.abs(last_year_df['pct_chg'])
-                                                             / last_year_df['turnover_rate_f'])
-                    close_last_year_high = df.loc[last_trading_day, 'close']\
-                        * df.loc[last_trading_day, 'adj_factor']\
-                        / np.nanmax(last_year_df['high'] * last_year_df['adj_factor'])
-                    max_return_last_year = np.nanmax(last_year_df['pct_chg'])
-                    corr_vol_close_year = corrcoef(last_year_df['vol'],
-                                                   last_year_df['adj_factor'] * last_year_df['close'])
-                    corr_vol_high_year = corrcoef(last_year_df['vol'],
-                                                  last_year_df['adj_factor'] * last_year_df['high'])
-                    corr_vol_open_year = corrcoef(last_year_df['vol'],
-                                                  last_year_df['adj_factor'] * last_year_df['open'])
-                    corr_vol_low_year = corrcoef(last_year_df['vol'],
-                                                 last_year_df['adj_factor'] * last_year_df['low'])
-                    high_open_year = np.nanmean(last_year_df['high'] / last_year_df['open'])
-                    close_low_year = np.nanmean(last_year_df['close'] / last_year_df['low'])
-                    trend_strength_year = (last_year_df['close'][-1] - last_year_df['pre_close'][0])\
-                        / np.nansum(np.abs(last_year_df['close'] - last_year_df['pre_close']))
-                    ma5_price = (np.nanmean(last_year_df['close'][-5:] * last_year_df['adj_factor'][-5:])
-                                  - price)\
-                        / price    
-                    ma20_price = (np.nanmean(last_year_df['close'][-20:] * last_year_df['adj_factor'][-20:])
-                                  - price)\
-                        / price
-                    ma20_ma5 = (np.nanmean(last_year_df['close'][-20:] * last_year_df['adj_factor'][-20:])
-                                - np.nanmean(last_year_df['close'][-5:] * last_year_df['adj_factor'][-5:]))\
-                        / price
-                    SO_k = SO(last_year_df.iloc[-20:])
-                    if last_year_df.shape[0] > 120:
-                        ma120_price = (np.nanmean(last_year_df['close'][-120:] * last_year_df['adj_factor'][-120:])
-                                       - price)\
-                            / price
-                        ma120_ma40 = (np.nanmean(last_year_df['close'][-120:] * last_year_df['adj_factor'][-120:])
-                                      - np.nanmean(last_year_df['close'][-40:] * last_year_df['adj_factor'][-40:]))\
-                            / price
-                    else:
-                        ma120_price = np.nan
-                        ma120_ma40 = np.nan
-                    if last_year_df.shape[0] > 60:
-                        ma60_price = (np.nanmean(last_year_df['close'][-60:] * last_year_df['adj_factor'][-60:])
-                                      - price)\
-                            / price
-                        ma60_ma20 = (np.nanmean(last_year_df['close'][-60:] * last_year_df['adj_factor'][-60:])
-                                     - np.nanmean(last_year_df['close'][-20:] * last_year_df['adj_factor'][-20:]))\
-                            / price
-                        SO_d = np.nanmean([SO(last_year_df.iloc[-20:]),
-                                           SO(last_year_df.iloc[-40:-20]),
-                                           SO(last_year_df.iloc[-60:-20])])
-                        SO_k_d = SO_k - SO_d
-                    else:
-                        ma60_price = np.nan
-                        ma60_ma20 = np.nan
-                        SO_d = np.nan
-                        SO_k_d = np.nan
-            
-                info = {
-                    'tick': stock,
-                    'industry': industry_stock(stock, dict_industry),
-                    'stock_value_cat': stock_to_cat(stock, current_date, dict_300, dict_500),
-                    'date': current_date,
-                    'return_rate_1d': return_rate_1d,
-                    'return_rate_5d': return_rate_5d,
-                    'return_rate_1m': return_rate_1m,
-                    # Trend factors
-                    # Reversal
-                    'return_last_1d': return_last_1d,
-                    'return_last_5d': return_last_5d,
-                    't_6_t_12': cal_return(current_date, -6, -12, df),
-                    't_12_t_36': cal_return(current_date, -12, -36, df),
-                    't_12_t_18': cal_return(current_date, -12, -18, df),
-                    # Momentum
-                    't_1_t_6': cal_return(current_date, -1, -6, df),
-                    't_t_1': t_t_1,
-                    'return_month': cal_hist_month(df, current_date),
-                    'SO_k': SO_k,
-                    'SO_d': SO_d,
-                    'SO_k_d': SO_k_d,
-                    'ma5_price': ma5_price,
-                    'ma20_price': ma20_price,
-                    'ma20_ma5': ma20_ma5,
-                    'ma60_price': ma60_price,
-                    'ma60_ma20': ma60_ma20,
-                    'ma120_price': ma120_price,
-                    'ma120_ma40': ma120_ma40,
-                    # Liquidity
-                    'std_tr_last_year': std_tr_last_year,
-                    'avg_tr_last_month': avg_tr_last_month,
-                    'avg_tr_last_month_avg_tr_last_year': avg_tr_last_month_avg_tr_last_year,
-                    # Technical
-                    'rsi_3': rsi_3,
-                    'rsi_3_adj': rsi_3_adj,
-                    'rsi_14': rsi_14,
-                    'rsi_14_adj': rsi_14_adj,
-                    'rsi_28': rsi_28,
-                    'rsi_28_adj': rsi_28_adj,
-                    'obv': obv,
-                    'close_last_year_high': close_last_year_high,
-                    'max_return_last_month': max_return_last_month,
-                    'max_return_last_year': max_return_last_year,
-                    'avg_abs_return_tr_last_year': avg_abs_return_tr_last_year,
-                    'ln_mv_t': math.log(df.loc[last_trading_day, 'total_mv']),
-                    'ln_mv_c': math.log(df.loc[last_trading_day, 'circ_mv']),
-                    'mv_c_mv_t': df.loc[last_trading_day, 'circ_mv'] / df.loc[last_trading_day, 'total_mv'],
-                    'return_var_month_realized': return_var_month_realized,
-                    'return_skew_month_realized': return_skew_month_realized,
-                    'return_kurt_month_realized': return_kurt_month_realized,
-                    'return_var_month': return_var_month,
-                    'return_skew_month': return_skew_month,
-                    'return_kurt_month': return_kurt_month,
-                    'return_d_var_month': return_d_var_month,
-                    'return_u_var_month': return_u_var_month,
-                    'return_d_var_var_month': return_d_var_var_month,
-                    'return_var_year_realized': return_var_year_realized,
-                    'return_skew_year_realized': return_skew_year_realized,
-                    'return_kurt_year_realized': return_kurt_year_realized,
-                    'return_var_year': return_var_year,
-                    'return_skew_year': return_skew_year,
-                    'return_kurt_year': return_kurt_year,
-                    'return_d_var_year': return_d_var_year,
-                    'return_u_var_year': return_u_var_year,
-                    'return_d_var_var_year': return_d_var_var_year,
-                    'corr_vol_close_month': corr_vol_close_month,
-                    'corr_vol_high_month': corr_vol_high_month,
-                    'corr_vol_open_month': corr_vol_open_month,
-                    'corr_vol_low_month': corr_vol_low_month,
-                    'high_open_month': high_open_month,
-                    'close_low_month': close_low_month,
-                    'trend_strength_month': trend_strength_month,
-                    'corr_vol_close_year': corr_vol_close_year,
-                    'corr_vol_high_year': corr_vol_high_year,
-                    'corr_vol_open_year': corr_vol_open_year,
-                    'corr_vol_low_year': corr_vol_low_year,
-                    'high_open_year': high_open_year,
-                    'close_low_year': close_low_year,
-                    'trend_strength_year': trend_strength_year,      
-            
-                    # Value factors
-                    'pe': df.loc[last_trading_day, 'pe_ttm'],
-                    'ps': df.loc[last_trading_day, 'ps_ttm'],
-                    'pb': df.loc[last_trading_day, 'pb'],
-                    'current_ratio': df_f.loc[f_date, 'current_ratio'],
-                    'quick_ratio': df_f.loc[f_date, 'quick_ratio'],
-                    'cash_ratio': df_f.loc[f_date, 'cash_ratio'],
-                    'inv_turn': df_f.loc[f_date, 'inv_turn'],
-                    'ar_turn': df_f.loc[f_date, 'ar_turn'],
-                    'ca_turn': df_f.loc[f_date, 'ca_turn'],
-                    'fa_turn': df_f.loc[f_date, 'fa_turn'],
-                    'assets_turn': df_f.loc[f_date, 'assets_turn'],
-                    'fcfe': fcfe,
-                    'tax_to_ebt': df_f.loc[f_date, 'tax_to_ebt'],
-                    'ocf_to_or': df_f.loc[f_date, 'ocf_to_or'],
-                    'ocf_to_opincome': df_f.loc[f_date, 'ocf_to_opincome'],
-                    'ca_to_assets': df_f.loc[f_date, 'ca_to_assets'],
-                    'tbassets_to_totalassets': df_f.loc[f_date, 'tbassets_to_totalassets'],
-                    'int_to_talcap': df_f.loc[f_date, 'int_to_talcap'],
-                    'currentdebt_to_debt': df_f.loc[f_date, 'currentdebt_to_debt'],
-                    'longdeb_to_debt': df_f.loc[f_date, 'longdeb_to_debt'],
-                    'ocf_to_shortdebt': df_f.loc[f_date, 'ocf_to_shortdebt'],
-                    'debt_to_eqt': df_f.loc[f_date, 'debt_to_eqt'],
-                    'tangibleasset_to_debt': df_f.loc[f_date, 'tangibleasset_to_debt'],
-                    'tangasset_to_intdebt': df_f.loc[f_date, 'tangasset_to_intdebt'],
-                    'tangibleasset_to_netdebt': df_f.loc[f_date, 'tangibleasset_to_netdebt'],
-                    'ocf_to_debt': df_f.loc[f_date, 'ocf_to_debt'],
-                    'ocf_to_interestdebt': df_f.loc[f_date, 'ocf_to_interestdebt'],
-                    'longdebt_to_workingcapital': df_f.loc[f_date, 'longdebt_to_workingcapital'],
-                    'ebitda_to_debt': df_f.loc[f_date, 'ebitda_to_debt'],
-                    'cash_to_liqdebt': df_f.loc[f_date, 'cash_to_liqdebt'],
-                    'cash_to_liqdebt_withinterest': df_f.loc[f_date, 'cash_to_liqdebt_withinterest'],
-                    'q_netprofit_margin': df_f.loc[f_date, 'q_netprofit_margin'],
-                    'q_gsprofit_margin': df_f.loc[f_date, 'q_gsprofit_margin'],
-                    'q_exp_to_sales': df_f.loc[f_date, 'q_exp_to_sales'],
-                    'q_profit_to_gr': df_f.loc[f_date, 'q_profit_to_gr'],
-                    'q_saleexp_to_gr': df_f.loc[f_date, 'q_saleexp_to_gr'],
-                    'q_adminexp_to_gr': df_f.loc[f_date, 'q_adminexp_to_gr'],
-                    'q_finaexp_to_gr': df_f.loc[f_date, 'q_finaexp_to_gr'],
-                    'q_impair_to_gr_ttm': df_f.loc[f_date, 'q_impair_to_gr_ttm'],
-                    'q_gc_to_gr': df_f.loc[f_date, 'q_gc_to_gr'],
-                    'q_op_to_gr': df_f.loc[f_date, 'q_op_to_gr'],
-                    'q_roe': df_f.loc[f_date, 'q_roe'],
-                    'q_dt_roe': df_f.loc[f_date, 'q_dt_roe'],
-                    'q_npta': df_f.loc[f_date, 'q_npta'],
-                    'q_opincome_to_ebt': df_f.loc[f_date, 'q_opincome_to_ebt'],
-                    'q_investincome_to_ebt': df_f.loc[f_date, 'q_investincome_to_ebt'],
-                    'q_dtprofit_to_profit': df_f.loc[f_date, 'q_dtprofit_to_profit'],
-                    'q_salescash_to_or': df_f.loc[f_date, 'q_salescash_to_or'],
-                    'q_ocf_to_sales': df_f.loc[f_date, 'q_ocf_to_sales'],
-                    'q_ocf_to_or': df_f.loc[f_date, 'q_ocf_to_or'],
-                    'ocf_yoy': df_f.loc[f_date, 'ocf_yoy'],
-                    'roe_yoy': df_f.loc[f_date, 'roe_yoy'],
-                    'q_gr_yoy': df_f.loc[f_date, 'q_gr_yoy'],
-                    'q_sales_yoy': df_f.loc[f_date, 'q_sales_yoy'],
-                    'q_op_yoy': df_f.loc[f_date, 'q_op_yoy'],
-                    'q_profit_yoy': df_f.loc[f_date, 'q_profit_yoy'],
-                    'q_netprofit_yoy': df_f.loc[f_date, 'q_netprofit_yoy'],
-                    'equity_yoy': df_f.loc[f_date, 'equity_yoy'],
-                    'rd_exp_to_earning': rd_exp_to_earning
-                }
-                data = data.append(info, ignore_index=True)
-                current_date = next_date
-            if data.shape[0] > 0:
-                data.to_sql(
-                    name=stock,
-                    con=con,
-                    if_exists='replace',
-                    index=False
-                    )
-                con.commit()
-        except Exception as e:
-            print(stock)
-            print(repr(e))
-    cur.close()
-    con.close()
-    print(str(i)+" done")
-    return None
-
-
-def cal_return(date, delta_1, delta_2, df):
-    # calculate the return from date + delta2 to date + delta1
-    date_1 = change_month(date, delta_1)
-    date_2 = change_month(date, delta_2)
-    df_1 = df.index[df.index <= date_2]
-    if df_1.shape[0] == 0:
-        return np.nan
-    stock_date_1 = df.index[df.index >= date_1][0]
-    stock_date_2 = df.index[df.index >= date_2][0]
-    return df.loc[stock_date_1, 'open'] * df.loc[stock_date_1, 'adj_factor']\
-        / (df.loc[stock_date_2, 'open'] * df.loc[stock_date_2, 'adj_factor']) - 1
-
-
-def change_month(date, delta):
-    # Change the date given month
-    month = int(date[-4:-2]) + delta
-    year = int(date[:4])
-    if month <= 0:
-        if month % 12 == 0:
-            year += math.floor(month / 12) - 1
-            month = 12
-        else:
-            year += math.floor(month / 12)
-            month = month % 12
-    elif month > 12:
-        year += math.ceil(month / 12) - 1
-        month = month % 12
-    if month < 10:
-        return str(year) + '0' + str(month) + date[-2:]
-    else:
-        return str(year) + str(month) + date[-2:]
-
-
-def cal_hist_month(df, date):
-    return_rate = []
-    while 1:
-        ret = cal_return(date, -11, -12, df)
-        if np.isnan(ret):
-            break
-        else:
-            return_rate.append(ret)
-        date = change_month(date, -12)
-    if len(return_rate) == 0:
-        return np.nan
-    else:
-        return np.nanmean(return_rate)
-
-
-def d_var(df):
-    return np.sum((df[df < 0] - np.mean(df)) ** 2 / (len(df) - 1))
-
-
-def u_var(df):
-    return np.sum((df[df > 0] - np.mean(df)) ** 2 / (len(df) - 1))
-
-
-def corrcoef(df_1, df_2):
-    return (np.nanmean(df_1 * df_2) - np.nanmean(df_1) * np.nanmean(df_2))\
-           / (np.nanstd(df_1) * np.nanstd(df_2))
-
-
-def industry_stock(stock, dict_industry):
-    for industry in dict_industry:
-        # print(dict_industry[industry]['con_code'])
-        if stock in list(dict_industry[industry]['con_code']):
-            return industry
-
-
-def stock_to_cat(stock, date, dict_300, dict_500):
-    if date < '20070101':
-        return 'No index yet'
-    if date[4:6] > '06':
-        key = date[:4] + '0701'
-    else:
-        key = date[:4] + '0101'
-    if stock in dict_300[key]:
-        return 'hs300'
-    elif stock in dict_500[key]:
-        return 'zz500'
-    else:
-        return 'other'
-
-
-def SO(df):
-    return (df['close'][-1] * df['adj_factor'][-1] - np.nanmax(df['high'] * df['adj_factor']))\
-        / (np.nanmax(df['high'] * df['adj_factor']) - np.nanmin(df['low'] * df['adj_factor']))
-
-
-def main():
     ts.set_token('267addf63a14adcfc98067fc253fbd72a728461706acf9474c0dae29')
     pro = ts.pro_api()
     dict_300 = {}
@@ -730,6 +258,17 @@ def main():
 
 
 def divide_list(given_list, num):
+    """
+    Divide the given list to a list that has num element, each element is a sub list of the given list.
+
+    Args:
+        given_list (list): The list that want to be separated.
+        num (int): The number of element in the new list.
+
+    Returns:
+        result (list): The list that has been separated.
+
+    """
     result = []
     length = int(len(given_list) / num)
     for i in range(num):
@@ -741,8 +280,21 @@ def divide_list(given_list, num):
 
 
 def cal_relative_return(df, dict_industry, d):
+    """
+    Calculate daily relative return cross-sectionally based on the data gathered.
+
+    Args:
+        df (DataFrame): Dataframe that has labeled daily return.
+        dict_industry (dict): A dict that contain stock list for every industry.
+        d (int): Multiprocessing id.
+
+    Returns:
+        None.
+
+    """
     date_list = df['date'].drop_duplicates()
-    for i in ['industry_return_1d', 'industry_return_5d', 'industry_return_20d', 'index_return_1d', 'index_return_5d', 'index_return_20d', 'all_return_1d', 'all_return_5d', 'all_return_20d']:
+    for i in ['industry_return_1d', 'industry_return_5d', 'industry_return_20d', 'index_return_1d',
+              'index_return_5d', 'index_return_20d', 'all_return_1d', 'all_return_5d', 'all_return_20d']:
         df[i] = 0
     for date in date_list:
         try:
@@ -775,6 +327,15 @@ def cal_relative_return(df, dict_industry, d):
 
 
 def give_relative_return():
+    """
+    Calculate daily relative return cross-sectionally based on the data gathered.
+
+    Multiprocessing is used in this function to speed up the process.
+
+    Returns:
+        None.
+
+    """
     result = get_data.get_from_sql(stock_id='All_Data', name='rf_data_research_target')
     result = result[result['date'] >= '20070101']
     result = result.sort_values(by=['date']).reset_index(drop=True)
@@ -809,6 +370,15 @@ def give_relative_return():
 
 
 def prep_data_rf_improved():
+    """
+    Calculate daily indicators and store them in rf_data_research.
+
+    Multiprocessing is used in this function to speed up the process.
+
+    Returns:
+        None.
+
+    """
     stock_list = get_data.get_sql_key()
     stock_list_f = get_data.get_sql_key(name='data_finance')
     stock_list = list(set(stock_list) & set(stock_list_f))
@@ -833,9 +403,28 @@ def prep_data_rf_improved():
         os.remove('D:\\Data\\rf_data_research_' + str(i) + '.sqlite')
     con.commit()
     cur.close()
-    con.close()    
+    con.close()
+
+
+def main():
+    """
+    The order function should be called for a new computer.
+
+    Returns:
+        None.
+
+    """
+    # if the computer have not download the basic and fundamental data
+    # get_data.download_all_market_data()
+    # get_data.download_all_market_data_finance()
+
+    # calculate relative return cross-sectionally and store them in rf_data_target.sql
+    gather_target_df()
+    cal_relative_return()
+
+    # calculate daily indicators and store them in rf_data_research
+    prep_data_rf_improved()
 
 
 if __name__ == '__main__':
-    give_relative_return()
-    
+    gather_target_df()
