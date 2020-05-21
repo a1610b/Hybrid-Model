@@ -67,12 +67,12 @@ def calc_accr_rf(stock_list, d):
                                 how='inner')
             data_set.fillna(0, inplace=True)
             temp_dict = {'tick': stock}
+            temp_dict['index'] = data_train_y['index'].iloc[-1]
+            temp_dict['industry'] = data_train_y['industry'].iloc[-1]
             
             for target in target_list:
-                data_set_working = data_set[list(data_train_x.columns) + [target]]
+                data_set_working = data_set[list(data_train_x.columns) + [target, 'return_1d']]
                 data_set_working = data_set_working[data_set_working[target] != 0]
-                data_set_x = data_set_working[data_train_x.columns]
-                data_set_y = data_set_working[['date', target]]
         
                 train_data_set = data_set_working[
                     data_set_working['date'] < train_end_date]
@@ -108,11 +108,26 @@ def calc_accr_rf(stock_list, d):
                 if not (prob_y >= 0.5).all():
                     prob_y[prob_y <= np.percentile(prob_y[prob_y<0.5], 30)] = 0
                 temp_dict[target+'_enhanced'] = round(np.nanmean((prob_y == test_y)) / 0.3, 4)
+                
+                if 'return_1d' in target:
+                    temp_dict[target+'_return'] = np.sum(y_pre * test_data_set['return_1d'])
+                    temp_dict[target+'_return_compound'] = np.prod(y_pre * test_data_set['return_1d']+1)
+                    y_pre[y_pre==0] = -1
+                    temp_dict[target+'_return_ls'] = np.sum(y_pre * test_data_set['return_1d'])
+                    temp_dict[target+'_return_compound_ls'] = np.prod(y_pre * test_data_set['return_1d']+1)
+                    
+                    stor_prob_y = prob_y.copy()
+                    prob_y[prob_y < 1] = 0
+                    temp_dict[target+'_enhanced_return'] = np.sum(prob_y * test_data_set['return_1d'])
+                    temp_dict[target+'_enhanced_return_compound'] = np.prod(prob_y * test_data_set['return_1d']+1)
+                    stor_prob_y[stor_prob_y == 0] = -1
+                    stor_prob_y[(stor_prob_y >= 0) & (stor_prob_y < 1)] = 0
+                    temp_dict[target+'_enhanced_return_ls'] = np.sum(stor_prob_y * test_data_set['return_1d'])
+                    temp_dict[target+'_enhanced_return_compound_ls'] = np.prod(stor_prob_y * test_data_set['return_1d']+1)
+
             for target in target_list_abs:
                 data_set_working = data_set[list(data_train_x.columns) + [target]]
                 data_set_working = data_set_working[data_set_working[target] != 0]
-                data_set_x = data_set_working[data_train_x.columns]
-                data_set_y = data_set_working[['date', target]]
         
                 train_data_set = data_set_working[
                     data_set_working['date'] < train_end_date]
@@ -148,6 +163,22 @@ def calc_accr_rf(stock_list, d):
                 if not (prob_y >= 0.5).all():
                     prob_y[prob_y <= np.percentile(prob_y[prob_y<0.5], 30)] = 0
                 temp_dict[target+'_enhanced'] = round(np.nanmean((prob_y == test_y)) / 0.3, 4)
+
+                if 'return_1d' in target:
+                    temp_dict[target+'_return'] = np.sum(y_pre * test_data_set['return_1d'])
+                    temp_dict[target+'_return_compound'] = np.prod(y_pre * test_data_set['return_1d']+1)
+                    y_pre[y_pre==0] = -1
+                    temp_dict[target+'_return_ls'] = np.sum(y_pre * test_data_set['return_1d'])
+                    temp_dict[target+'_return_compound_ls'] = np.prod(y_pre * test_data_set['return_1d']+1)
+                    
+                    stor_prob_y = prob_y.copy()
+                    prob_y[prob_y < 1] = 0
+                    temp_dict[target+'_enhanced_return'] = np.sum(prob_y * test_data_set['return_1d'])
+                    temp_dict[target+'_enhanced_return_compound'] = np.prod(prob_y * test_data_set['return_1d']+1)
+                    stor_prob_y[stor_prob_y == 0] = -1
+                    stor_prob_y[(stor_prob_y >= 0) & (stor_prob_y < 1)] = 0
+                    temp_dict[target+'_enhanced_return_ls'] = np.sum(stor_prob_y * test_data_set['return_1d'])
+                    temp_dict[target+'_enhanced_return_compound_ls'] = np.prod(stor_prob_y * test_data_set['return_1d']+1)
             result_stock = result_stock.append(temp_dict, ignore_index=True)
         except Exception as e:
             print(stock)
@@ -177,7 +208,11 @@ def calc_accr():
         temp = pd.read_csv('rf_result' + str(i) + '.csv')
         final_result = final_result.append(temp)
     final_result.to_csv('rf_result.csv')
+    print(final_result.mean())
+    print(final_result.groupy('industry').mean())
+    print(final_result.groupy('index').mean())
     
+
 if __name__ == '__main__':
     warnings.filterwarnings("ignore")
     calc_accr()

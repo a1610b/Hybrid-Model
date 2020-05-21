@@ -140,6 +140,46 @@ def prep_data_for_rf_improve(stock_list, const):
     con.close()
 
 
+def gather_target_df():
+    con = db.connect('D:\\Data\\rf_data_research_target.sqlite')
+    
+    dict_industry = get_data.get_industry_stock_list()
+    data_list = get_data.get_sql_key()
+    data_f_list = get_data.get_sql_key(name='data_finance')
+    data_l = set(data_list)
+    
+    for i in dict_industry:
+        dict_industry[i] = list(dict_industry[i]['con_code'])
+        data_l = data_l - set(dict_industry[i]['con_code'])
+    dict_industry['None'] = list(data_l)
+    
+    result = pd.DataFrame()
+    for industry in dict_industry:
+        for stock in dict_industry[industry]['con_code']:
+            if (stock not in data_f_list) or (stock not in data_list):
+                 continue
+            df = get_data.get_from_sql(stock_id=stock)
+            df_m = pd.DataFrame()
+            df_m['close_adj'] = df['close'] * df['adj_factor']
+            df_m['return_1d'] = (df_m['close_adj'].shift(-1) - df_m['close_adj']) / df_m['close_adj']
+            df_m['return_5d'] = (df_m['close_adj'].shift(-5) - df_m['close_adj']) / df_m['close_adj']
+            df_m['return_20d'] = (df_m['close_adj'].shift(-20) - df_m['close_adj']) / df_m['close_adj']
+            df_m['tick'] = stock
+            df_m = df_m[['return_1d', 'return_5d', 'return_20d', 'tick']]
+            df_m['industry'] = industry
+            df_m['date'] = df['trade_date']
+            result = result.append(df_m) 
+    
+    result.to_sql(
+        name='All_Data',
+        con=con,
+        if_exists='replace',
+        index=False
+    )
+    con.commit()
+    con.close()
+
+
 def prep_data_for_rf(stock_list, dict_industry, calendar, i, dict_300, dict_500):
     con = db.connect('D:\\Data\\rf_temp_'+str(i)+'.sqlite')
     cur = con.cursor()
@@ -747,7 +787,6 @@ def give_relative_return():
         else:
             sub_result[i] = result.loc[cutting[i * unit]:]
     dict_industry = get_data.get_industry_stock_list()
-    collect_result = []
     p = Pool()
     print('Start pooling')
     for i in range(24):
