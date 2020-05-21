@@ -175,12 +175,12 @@ def gather_target_df():
 
     for i in dict_industry:
         dict_industry[i] = list(dict_industry[i]['con_code'])
-        data_l = data_l - set(dict_industry[i]['con_code'])
+        data_l = data_l - set(dict_industry[i])
     dict_industry['None'] = list(data_l)
 
     result = pd.DataFrame()
     for industry in dict_industry:
-        for stock in dict_industry[industry]['con_code']:
+        for stock in dict_industry[industry]:
             if (stock not in data_f_list) or (stock not in data_list):
                 continue
             df = get_data.get_from_sql(stock_id=stock)
@@ -428,3 +428,4 @@ def main():
 
 if __name__ == '__main__':
     gather_target_df()
+    give_relative_return()

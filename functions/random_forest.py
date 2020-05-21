@@ -183,7 +183,7 @@ def calc_accr_rf(stock_list, d):
         except Exception as e:
             print(stock)
             print(repr(e))
-    result_stock.to_csv('rf_result' + str(d) + '.csv')
+    result_stock.to_csv('D:\output\rf_result' + str(d) + '.csv')
     
 
 
@@ -201,17 +201,17 @@ def calc_accr():
         result.append(p.apply_async(calc_accr_rf, args=(stock_list_list[i], i, )))
     p.close()
     p.join()
-    
-    
+
+
     final_result = pd.DataFrame()
     for i in range(24):
-        temp = pd.read_csv('rf_result' + str(i) + '.csv')
+        temp = pd.read_csv('D:\output\rf_result' + str(i) + '.csv')
         final_result = final_result.append(temp)
-    final_result.to_csv('rf_result.csv')
+    final_result.to_csv('D:\output\rf_result.csv')
     print(final_result.mean())
     print(final_result.groupy('industry').mean())
     print(final_result.groupy('index').mean())
-    
+
 
 if __name__ == '__main__':
     warnings.filterwarnings("ignore")
