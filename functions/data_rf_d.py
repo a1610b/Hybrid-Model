@@ -1,16 +1,54 @@
 # -*- coding: utf-8 -*-
 import os
+import sys
+sys.path.append('D:\Code\Hybrid Model')
+import tushare as ts
 import sqlite3 as db
 from multiprocessing import Pool
 import pandas as pd
-import tushare as ts
 import numpy as np
 import functions.get_data as get_data
-import math
 import talib
 
 
-def prep_data_for_rf_improve(stock_list, const):
+def get_adjustment_day():
+    ts.set_token('267addf63a14adcfc98067fc253fbd72a728461706acf9474c0dae29')
+    pro = ts.pro_api()
+    
+    #定义交易日历并找到过去10年沪深300固定调整的日期
+    calendar = pro.trade_cal(exchange='',
+                             start_date='20070101',
+                             end_date='20200501')
+    
+    calendar['week_day'] = pd.to_datetime(calendar['cal_date'],
+                                          format="%Y%m%d").dt.dayofweek
+    #计算出工作日
+    
+    #挑出六月和十二月的第二个星期五后的那个交易日
+    second_friday = []
+    calendar['month'] = pd.to_datetime(calendar['cal_date'],
+                                       format="%Y%m%d").dt.month
+    calendar['year'] = pd.to_datetime(calendar['cal_date'],
+                                      format="%Y%m%d").dt.year
+    for year in set(calendar['year']):
+        for month in [6, 12]:
+            if (calendar[calendar['year'] == year].shape[0] > 20) and (calendar[
+                    calendar['month'] == month][calendar['year'] == year].shape[0]
+                                                                       > 16):
+                second_friday.append(
+                    calendar[calendar['month'] == month][calendar['year'] == year][
+                        calendar['week_day'] == 4].iloc[1]['cal_date'])
+    
+    adjustment_day = []
+    calendar = calendar[calendar['is_open'] == 1][['cal_date'
+                                                   ]].reset_index(drop=True)
+    for i in second_friday:
+        adjustment_day.append(
+            calendar[calendar['cal_date'] > i].iloc[0]['cal_date'])
+    adjustment_day.sort()
+    return adjustment_day
+
+def prep_data_for_rf(stock_list, const):
     """
     Calculate the daily indicators for stocks in the given stock_list.
 
@@ -178,6 +216,7 @@ def gather_target_df():
         data_l = data_l - set(dict_industry[i])
     dict_industry['None'] = list(data_l)
 
+    # calculate future return and give industry label
     result = pd.DataFrame()
     for industry in dict_industry:
         for stock in dict_industry[industry]:
@@ -194,6 +233,51 @@ def gather_target_df():
             df_m['industry'] = industry
             df_m['date'] = df['trade_date']
             result = result.append(df_m)
+    adjustment_day = get_adjustment_day()
+
+    # Give index label
+    ts.set_token('267addf63a14adcfc98067fc253fbd72a728461706acf9474c0dae29')
+    pro = ts.pro_api()
+    dict_300 = {}
+    for i in range(14):
+        dict_300[str(2007+i)+'0101'] = list(pro.index_weight(index_code='399300.SZ',
+                                                             start_date=str(2007+i)+'0101',
+                                                             end_date=str(2007+i)+'0110')['con_code'].iloc[:300])
+        if i != 13:
+            dict_300[str(2007+i)+'0701'] = list(pro.index_weight(index_code='399300.SZ',
+                                                                 start_date=str(2007+i)+'0625',
+                                                                 end_date=str(2007+i)+'0701')['con_code'].iloc[:300])
+    dict_500 = {}
+    for i in range(14):
+        dict_500[str(2007+i)+'0101'] = list(pro.index_weight(index_code='000905.SH',
+                                                             start_date=str(2007+i)+'0101',
+                                                             end_date=str(2007+i)+'0301')['con_code'].iloc[:500])
+        if i != 13:
+            dict_500[str(2007+i)+'0701'] = list(pro.index_weight(index_code='000905.SH',
+                                                                 start_date=str(2007+i)+'0625',
+                                                                 end_date=str(2007+i)+'0710')['con_code'].iloc[:500])
+            
+    result['index'] = 'None'
+    adjustment_day = pd.Series(adjustment_day)
+    result.dropna(axis=0, inplace = True)
+    
+    for t in dict_300:
+        if adjustment_day[adjustment_day < t].shape[0] == 0:
+            start_date = '20070101'
+            end_date = adjustment_day[adjustment_day > t].iloc[0]
+        elif adjustment_day[adjustment_day > t].shape[0] == 0:
+            start_date = adjustment_day.iloc[-1]
+            end_date = '20200501'
+        else:
+            start_date = adjustment_day[adjustment_day < t].iloc[-1]
+            end_date = adjustment_day[adjustment_day > t].iloc[0]
+        temp = result[(result['date'] > start_date) & (result['date'] <= end_date)]
+        for stock in dict_300[t]:
+            temp = temp[temp['tick'] == stock]
+            result.loc[temp.index, 'index'] = 'hs300'
+        for stock in dict_500[t]:
+            temp = temp[temp['tick'] == stock]
+            result.loc[temp.index, 'index'] = 'zz500'
 
     result.to_sql(
         name='All_Data',
@@ -203,58 +287,6 @@ def gather_target_df():
     )
     con.commit()
     con.close()
-    ts.set_token('267addf63a14adcfc98067fc253fbd72a728461706acf9474c0dae29')
-    pro = ts.pro_api()
-    dict_300 = {}
-    for i in range(14):
-        dict_300[str(2007+i)+'0101'] = list(pro.index_weight(index_code='399300.SZ',
-                                                             start_date=str(2007+i)+'0101',
-                                                             end_date=str(2007+i)+'0110')['con_code'].iloc[:300])
-        dict_300[str(2007+i)+'0701'] = list(pro.index_weight(index_code='399300.SZ',
-                                                             start_date=str(2007+i)+'0625',
-                                                             end_date=str(2007+i)+'0701')['con_code'].iloc[:300])
-    dict_500 = {}
-    for i in range(14):
-        dict_500[str(2007+i)+'0101'] = list(pro.index_weight(index_code='000905.SH',
-                                                             start_date=str(2007+i)+'0101',
-                                                             end_date=str(2007+i)+'0201')['con_code'].iloc[:500])
-        dict_500[str(2007+i)+'0701'] = list(pro.index_weight(index_code='000905.SH',
-                                                             start_date=str(2007+i)+'0625',
-                                                             end_date=str(2007+i)+'0710')['con_code'].iloc[:500])
-    calendar = pro.trade_cal(exchange='')
-    calendar = calendar[calendar['is_open'] == 1]['cal_date']
-    dict_industry = get_data.get_industry_stock_list()
-    stock_list = get_data.get_sql_key()
-    # prep_data_for_rf(stock_list, dict_industry, calendar, 1, dict_300, dict_500)
-    stock_list_list = []
-    length = int(len(stock_list) / 24)
-    for i in range(24):
-        if i == 23:
-            stock_list_list.append(stock_list[i*length:])
-        else:
-            stock_list_list.append(stock_list[i*length: (i+1)*length])
-    p = Pool()
-    for i in range(24):
-        p.apply_async(prep_data_for_rf, args=(stock_list_list[i], dict_industry, calendar, i, dict_300, dict_500, ))
-    p.close()
-    p.join()
-    data = {}
-    for i in range(24):
-        data_temp = get_data.get_from_sql(name='rf_temp_' + str(i))
-        data = {**data, **data_temp}
-    con = db.connect('D:\\Data\\rf_data_d.sqlite')
-    cur = con.cursor()
-    for stock in data:
-        data[stock].to_sql(
-            name=stock,
-            con=con,
-            if_exists='replace',
-            index=False
-            )
-    con.commit()
-    cur.close()
-    con.close()
-    return None
 
 
 def divide_list(given_list, num):
@@ -279,13 +311,13 @@ def divide_list(given_list, num):
     return result
 
 
-def cal_relative_return(df, dict_industry, d):
+def cal_relative_return(df, industry_list, d):
     """
     Calculate daily relative return cross-sectionally based on the data gathered.
 
     Args:
         df (DataFrame): Dataframe that has labeled daily return.
-        dict_industry (dict): A dict that contain stock list for every industry.
+        industry_list (dict): A dict that contain stock list for every industry.
         d (int): Multiprocessing id.
 
     Returns:
@@ -303,7 +335,7 @@ def cal_relative_return(df, dict_industry, d):
             df.loc[temp.index, 'all_return_1d'] = temp['return_1d'].rank(pct=True)
             df.loc[temp.index, 'all_return_5d'] = temp['return_5d'].rank(pct=True)
             df.loc[temp.index, 'all_return_20d'] = temp['return_20d'].rank(pct=True)
-            for industry in dict_industry:
+            for industry in industry_list:
                 temp_i = temp[temp['industry'] == industry]
                 df.loc[temp_i.index, 'industry_return_1d'] = temp_i['return_1d'].rank(pct=True)
                 df.loc[temp_i.index, 'industry_return_5d'] = temp_i['return_5d'].rank(pct=True)
@@ -348,10 +380,12 @@ def give_relative_return():
         else:
             sub_result[i] = result.loc[cutting[i * unit]:]
     dict_industry = get_data.get_industry_stock_list()
+    industry_list = list(dict_industry.keys()) + ['None']
+    cal_relative_return(sub_result[0], industry_list, 0)
     p = Pool()
     print('Start pooling')
     for i in range(24):
-        p.apply_async(cal_relative_return, args=(sub_result[i], dict_industry, i, ))
+        p.apply_async(cal_relative_return, args=(sub_result[i], industry_list, i, ))
     p.close()
     p.join()
     print('Done pooling')
@@ -369,7 +403,7 @@ def give_relative_return():
     con.close()
 
 
-def prep_data_rf_improved():
+def prep_data_rf():
     """
     Calculate daily indicators and store them in rf_data_research.
 
@@ -386,7 +420,7 @@ def prep_data_rf_improved():
     print('Start')
     p = Pool()
     for i in range(24):
-        p.apply_async(prep_data_for_rf_improve, args=(stock_list_list[i], i,))
+        p.apply_async(prep_data_for_rf, args=(stock_list_list[i], i,))
     p.close()
     p.join()
     con = db.connect('D:\\Data\\rf_data_research.sqlite')
@@ -423,7 +457,7 @@ def main():
     cal_relative_return()
 
     # calculate daily indicators and store them in rf_data_research
-    prep_data_rf_improved()
+    prep_data_rf()
 
 
 if __name__ == '__main__':
